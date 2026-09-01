@@ -1,0 +1,5 @@
+# Recommended backend: fast on CPU (Apple Silicon included), no PyTorch needed.
+faster-whisper>=1.0.3
+
+# Alternative, used automatically if faster-whisper is missing:
+# openai-whisper>=20231117

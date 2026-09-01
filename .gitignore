@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.claude/
+
+# Working material, never to be published
+*.mp3
+*.wav
+*.mov
+*.mp4
+*.srt
+*.vtt
+*_words.json
