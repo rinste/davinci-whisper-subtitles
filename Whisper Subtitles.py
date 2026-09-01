@@ -225,6 +225,28 @@ def marked_span(timeline):
     return origin + int(mark["in"]), origin + int(mark["out"]) + 1   # out is inclusive
 
 
+def restore_marks(timeline, marks):
+    """Put the in/out range back: AppendToTimeline wipes it.
+
+    SetMarkInOut takes the same timeline-relative frames GetMarkInOut hands out,
+    so this is symmetric. Video and audio are restored separately in case they
+    were not the same range.
+    """
+    if not marks:
+        return
+    video = marks.get("video") or {}
+    audio = marks.get("audio") or {}
+    try:
+        if video and video == audio:
+            timeline.SetMarkInOut(video["in"], video["out"], "all")
+            return
+        for kind, mark in (("video", video), ("audio", audio)):
+            if "in" in mark and "out" in mark:
+                timeline.SetMarkInOut(mark["in"], mark["out"], kind)
+    except Exception:
+        pass
+
+
 def read_track(timeline, project, track_index, span=None):
     """Clips on the track: source, in-point, duration, position.
 
@@ -654,7 +676,13 @@ def main():
             project.SetCurrentTimeline(timeline)
             timeline = project.GetCurrentTimeline()
 
-        # An in/out range on the timeline means: only do that part.
+        # An in/out range on the timeline means: only do that part. Keep the raw
+        # marks too - inserting the subtitles clears them, and losing the range you
+        # just set is infuriating.
+        try:
+            marks = timeline.GetMarkInOut()
+        except Exception:
+            marks = None
         span = marked_span(timeline)
         if span:
             log("Using the marked range: {}".format(span_label(timeline, project, span)))
@@ -687,6 +715,7 @@ def main():
             insert_srt(project, timeline, srt, log, opts["replace"], span)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+            restore_marks(timeline, marks)
 
     def read_options():
         return {

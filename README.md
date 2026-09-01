@@ -229,6 +229,9 @@ Behaviours of Resolve's scripting API found the hard way, none of them documente
 - `Timeline.GetMarkInOut()` returns frames counted **from the start of the timeline**, while
   clips report **absolute** frames. Mixing the two silently puts everything in the wrong
   place.
+- `AppendToTimeline` **clears the in/out range** as a side effect - `ImportMedia` does not.
+  The range has to be read before and put back afterwards with `SetMarkInOut`, which takes
+  the same relative frames `GetMarkInOut` returns.
 - A subtitle item's `GetName()` gives its text with `U+2028` between lines, not `\n`.
 - `MediaPool.ImportMedia` silently returns `None` for a path it has already imported, so
   every run writes its SRT to a fresh temporary folder.
