@@ -12,21 +12,24 @@ manage, no round trip through an external app.
 ## Why not the built-in one
 
 Resolve's "Create Subtitles from Audio" wraps text by counting characters. At 18 characters
-per line that produces breaks like this:
+per line that produces breaks like these:
 
 ```
-il benessere della        Se anche tu vuoi
-pelle o supportare        provare, ti lascio
+the health of your        and I'll leave a
+skin                      link below
 ```
 
-A line ending on `della` leaves the reader hanging on a preposition. This plugin uses
-Whisper's per-word timestamps and decides where to break from punctuation, real pauses in
-the audio, and grammar:
+The first line strands `your`, the second strands `a`, and both leave a stub dangling on the
+line below. This plugin uses Whisper's per-word timestamps and decides where to break from
+punctuation, real pauses in the audio, and grammar:
 
 ```
-il benessere              Se anche tu
-della pelle               vuoi provare,
+the health                and I'll leave
+of your skin              a link below
 ```
+
+Same words, same 18-character limit. Each line now ends on a word that can stand at the end
+of one, and the two lines come out roughly even.
 
 ## What it does differently
 
