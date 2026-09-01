@@ -112,6 +112,26 @@ they are *appended* to whatever is already there. So if that track is occupied t
 stops immediately and asks you to tick *Replace existing subtitles*, rather than stacking
 copies on top of your work.
 
+### Only part of the timeline
+
+Set in and out points on the timeline and only that stretch is done. The plugin says so in
+the window before you press Create:
+
+```
+Ready - only the marked range will be done: 0:36.6 to 1:00.8  (24.3s)
+```
+
+It rebuilds only the marked audio, transcribes only that, and the subtitles land at the
+right place - 24 seconds instead of two and a half minutes is 19 seconds of work instead of
+70. Nothing runs past the out point either: the last subtitle is held to the boundary
+rather than being stretched past it by the minimum-duration rule.
+
+Subtitles **outside** the range are kept. They have to be rebuilt to do that - Resolve
+appends an imported SRT after whatever is already on the track instead of aligning it, so
+the track is read back, emptied, and written once with the old subtitles and the new ones
+together. Text and timings survive, including line breaks and accents; any per-item styling
+does not, since the items are new.
+
 ## Windows
 
 > **Untested.** Everything else in this project was verified by running it. The Windows
@@ -171,6 +191,10 @@ Transcribing is the slow part. Save the word timings once and re-split them for 
 .venv/bin/python whisper_srt.py --from-json words.json -c 14 --max-lines 1 -o short.srt
 ```
 
+`--offset` and `--max-time` shift and clamp the output timestamps - that is how the plugin
+handles a marked range, by feeding the engine just that audio and telling it where it sits
+on the timeline.
+
 `--help` lists everything. It also has a `--backend wavespeed` mode that runs Whisper
 large-v3 in the cloud with no local install; note that the endpoint only returns
 per-segment timestamps, so the per-word timings are estimated and the sync is looser.
@@ -198,6 +222,14 @@ Behaviours of Resolve's scripting API found the hard way, none of them documente
 - `MediaPool.AppendToTimeline` with `trackIndex` or `recordFrame` appends the subtitles at
   the **end of the timeline** instead of aligning them. With `mediaPoolItem` alone they line
   up correctly. It also always writes to Subtitle 1, whatever you pass.
+- ...and only onto an **empty** track. If Subtitle 1 already holds anything, the imported
+  file is dropped after the last existing item rather than aligned - subtitles for 0:36 came
+  out at 1:53. There is no way to insert into part of a track, so partial updates mean
+  reading the track back and rewriting all of it.
+- `Timeline.GetMarkInOut()` returns frames counted **from the start of the timeline**, while
+  clips report **absolute** frames. Mixing the two silently puts everything in the wrong
+  place.
+- A subtitle item's `GetName()` gives its text with `U+2028` between lines, not `\n`.
 - `MediaPool.ImportMedia` silently returns `None` for a path it has already imported, so
   every run writes its SRT to a fresh temporary folder.
 - There is no SRT import/export on the timeline: `ImportIntoTimeline` only takes AAF.

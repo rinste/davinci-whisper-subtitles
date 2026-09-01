@@ -195,10 +195,44 @@ def get_ui():
 # Rebuilding the audio of one track
 # --------------------------------------------------------------------------------------
 
-def read_track(timeline, project, track_index):
-    """Clips on the track: source, in-point, duration, position in the timeline."""
+def span_label(timeline, project, span):
+    """The marked range as mm:ss - mm:ss, for the status line."""
     fps = float(project.GetSetting("timelineFrameRate"))
     origin = timeline.GetStartFrame()
+
+    def mmss(frame):
+        total = (frame - origin) / fps
+        return "{:d}:{:04.1f}".format(int(total // 60), total % 60)
+
+    return "{} to {}  ({:.1f}s)".format(mmss(span[0]), mmss(span[1]),
+                                        (span[1] - span[0]) / fps)
+
+
+def marked_span(timeline):
+    """The in/out range set on the timeline, as absolute frames, or None.
+
+    Careful: GetMarkInOut returns frames counted from the start of the timeline,
+    while clips report absolute frames. They have to be put on the same footing.
+    """
+    try:
+        marks = timeline.GetMarkInOut() or {}
+    except Exception:
+        return None
+    mark = marks.get("audio") or marks.get("video") or {}
+    if "in" not in mark or "out" not in mark:
+        return None
+    origin = timeline.GetStartFrame()
+    return origin + int(mark["in"]), origin + int(mark["out"]) + 1   # out is inclusive
+
+
+def read_track(timeline, project, track_index, span=None):
+    """Clips on the track: source, in-point, duration, position.
+
+    With a span (absolute frames) only the part inside it is kept, and positions
+    are measured from the start of the span rather than the start of the timeline.
+    """
+    fps = float(project.GetSetting("timelineFrameRate"))
+    lo, hi = span if span else (timeline.GetStartFrame(), timeline.GetEndFrame())
     segs, sources, skipped = [], [], 0
     for item in (timeline.GetItemListInTrack("audio", track_index) or []):
         mpi = item.GetMediaPoolItem()
@@ -208,12 +242,16 @@ def read_track(timeline, project, track_index):
         if not path or not os.path.exists(path):
             skipped += 1
             continue
+        start, end = item.GetStart(), item.GetEnd()
+        cut_start, cut_end = max(start, lo), min(end, hi)
+        if cut_end <= cut_start:      # entirely outside the marked range
+            continue
         if path not in sources:
             sources.append(path)
         segs.append({"src": sources.index(path),
-                     "in": item.GetLeftOffset() / fps,
-                     "dur": item.GetDuration() / fps,
-                     "at": (item.GetStart() - origin) / fps})
+                     "in": (item.GetLeftOffset() + (cut_start - start)) / fps,
+                     "dur": (cut_end - cut_start) / fps,
+                     "at": (cut_start - lo) / fps})
     return segs, sources, skipped
 
 
@@ -256,7 +294,9 @@ def run_whisper(wav, srt, opts, log):
     cmd = [PYTHON, SCRIPT, wav, "-o", srt,
            "-m", opts["model"], "-l", opts["language"],
            "-c", str(opts["chars"]), "--max-lines", str(opts["lines"]),
-           "--min-gap", "{:.4f}".format(opts["gap_sec"])]
+           "--min-gap", "{:.4f}".format(opts["gap_sec"]),
+           "--offset", "{:.4f}".format(opts.get("offset_sec", 0.0)),
+           "--max-time", "{:.4f}".format(opts.get("max_time_sec", 0.0))]
     if opts["fill_gaps"]:
         cmd.append("--fill-gaps")
     if opts["stretch"]:
@@ -292,21 +332,106 @@ def run_whisper(wav, srt, opts, log):
 # Dropping the subtitles into the timeline
 # --------------------------------------------------------------------------------------
 
-def insert_srt(project, timeline, srt, log, replace):
-    """Insert the subtitles, then clean up after ourselves.
+def srt_time(seconds):
+    ms = max(0, int(round(seconds * 1000)))
+    h, ms = divmod(ms, 3600000)
+    m, ms = divmod(ms, 60000)
+    sec, ms = divmod(ms, 1000)
+    return "{:02d}:{:02d}:{:02d},{:03d}".format(h, m, sec, ms)
 
-    AppendToTimeline ALWAYS writes to Subtitle 1 and appends to whatever is already
-    there, so without an explicit replace we stop with an error rather than stack
-    copies on top of the user's work.
+
+def parse_srt(path):
+    """Minimal SRT reader: index, timing line, then the text until a blank line."""
+    cues = []
+    with open(path, encoding="utf-8") as fh:
+        for block in fh.read().replace("\r\n", "\n").strip().split("\n\n"):
+            lines = block.split("\n")
+            if len(lines) < 3 or "-->" not in lines[1]:
+                continue
+            a, _, b = lines[1].partition("-->")
+
+            def seconds(stamp):
+                hh, mm, rest = stamp.strip().split(":")
+                ss, _, milli = rest.replace(".", ",").partition(",")
+                return int(hh) * 3600 + int(mm) * 60 + int(ss) + int(milli or 0) / 1000.0
+
+            cues.append({"start": seconds(a), "end": seconds(b),
+                         "text": "\n".join(lines[2:])})
+    return cues
+
+
+def write_srt(path, cues):
+    with open(path, "w", encoding="utf-8") as fh:
+        for i, c in enumerate(sorted(cues, key=lambda x: x["start"]), 1):
+            fh.write("{}\n{} --> {}\n{}\n\n".format(
+                i, srt_time(c["start"]), srt_time(c["end"]), c["text"]))
+
+
+def subtitles_in_way(timeline, span):
+    """Existing subtitles on Subtitle 1 that the new ones would land on top of.
+
+    With a marked range that is only the subtitles inside it: the rest of the track
+    is work we have no business deleting.
     """
     existing = timeline.GetItemListInTrack("subtitle", 1) or []
+    if not span:
+        return existing
+    lo, hi = span
+    return [i for i in existing if i.GetStart() < hi and i.GetEnd() > lo]
+
+
+def read_subtitle_track(timeline, fps, origin):
+    """The subtitles already on Subtitle 1, as plain cues.
+
+    Resolve returns a multi-line subtitle with U+2028 between the lines.
+    """
+    out = []
+    for item in (timeline.GetItemListInTrack("subtitle", 1) or []):
+        out.append({"start": (item.GetStart() - origin) / fps,
+                    "end": (item.GetEnd() - origin) / fps,
+                    "text": (item.GetName() or "").replace("\u2028", "\n")})
+    return out
+
+
+def insert_srt(project, timeline, srt, log, replace, span=None):
+    """Insert the subtitles, then clean up after ourselves.
+
+    AppendToTimeline always writes to Subtitle 1, and if that track is not empty it
+    drops the whole file AFTER whatever is already there instead of aligning it. So
+    a partial replacement cannot be done in place: when only a marked range is being
+    redone, the subtitles outside it are read back, the track is emptied, and
+    everything goes in as one file.
+    """
+    fps = float(project.GetSetting("timelineFrameRate"))
+    origin = timeline.GetStartFrame()
+    existing = timeline.GetItemListInTrack("subtitle", 1) or []
+    clashing = subtitles_in_way(timeline, span)
+    if clashing and not replace:
+        raise RuntimeError(
+            "Subtitle 1 already has {} subtitles{}. Tick \"Replace existing "
+            "subtitles\", or clear the track first.".format(
+                len(clashing), " in the marked range" if span else ""))
+
+    cues = parse_srt(srt)
+    if not cues:
+        raise RuntimeError("The generated SRT was empty.")
+
     if existing:
-        if not replace:
-            raise RuntimeError(
-                "Subtitle 1 already has {} subtitles. Tick \"Replace existing "
-                "subtitles\", or clear the track first.".format(len(existing)))
-        log("Replacing {} existing subtitles...".format(len(existing)))
+        keep = []
+        if span:
+            lo, hi = (span[0] - origin) / fps, (span[1] - origin) / fps
+            keep = [c for c in read_subtitle_track(timeline, fps, origin)
+                    if c["end"] <= lo or c["start"] >= hi]
+            if keep:
+                log("Keeping {} subtitles outside the range, redoing {}...".format(
+                    len(keep), len(clashing)))
+            elif clashing:
+                log("Replacing {} existing subtitles...".format(len(clashing)))
+        else:
+            log("Replacing {} existing subtitles...".format(len(existing)))
         timeline.DeleteClips(existing)
+        cues = keep + cues
+        write_srt(srt, cues)
 
     mp = project.GetMediaPool()
     if timeline.GetTrackCount("subtitle") == 0:
@@ -315,7 +440,7 @@ def insert_srt(project, timeline, srt, log, replace):
     if not items:
         raise RuntimeError("Resolve refused to import the SRT.")
     # NOTE: passing trackIndex or recordFrame would append the subtitles at the very
-    # end of the timeline. With mediaPoolItem alone they line up with its start.
+    # end of the timeline. With mediaPoolItem alone, and an empty track, they line up.
     ok = mp.AppendToTimeline([{"mediaPoolItem": items[0]}])
     n = len(timeline.GetItemListInTrack("subtitle", 1) or [])
     try:
@@ -324,7 +449,7 @@ def insert_srt(project, timeline, srt, log, replace):
         pass
     if not ok or n == 0:
         raise RuntimeError("Could not insert the subtitles into the timeline.")
-    log("Done - {} subtitles inserted on Subtitle 1.".format(n))
+    log("Done - {} subtitles on Subtitle 1.".format(n))
 
 
 # --------------------------------------------------------------------------------------
@@ -499,16 +624,24 @@ def main():
             except Exception:
                 continue
 
+    def ready_message(tl):
+        """Says up front whether an in/out range is going to be used."""
+        span = marked_span(tl)
+        if not span:
+            return "Ready."
+        return "Ready - only the marked range will be done: " + span_label(tl, project, span)
+
     def on_timeline(ev):
         """Picking another timeline repopulates the audio tracks: they differ."""
         try:
-            rows = list_audio_tracks(selected_timeline())
+            tl = selected_timeline()
+            rows = list_audio_tracks(tl)
             state["tracks"] = rows
             it["Track"].Clear()
             for label, _, _ in rows:
                 it["Track"].AddItem(label)
             it["Track"].CurrentIndex = first_track_with_clips(rows)
-            log("Ready.", False)   # UI only: on every timeline change it would be log noise
+            log(ready_message(tl), False)   # UI only: on every change it would be log noise
         except Exception as e:
             log("ERROR: {}".format(e))
 
@@ -521,17 +654,27 @@ def main():
             project.SetCurrentTimeline(timeline)
             timeline = project.GetCurrentTimeline()
 
+        # An in/out range on the timeline means: only do that part.
+        span = marked_span(timeline)
+        if span:
+            log("Using the marked range: {}".format(span_label(timeline, project, span)))
+            opts = dict(opts,
+                        offset_sec=(span[0] - timeline.GetStartFrame()) / fps,
+                        max_time_sec=(span[1] - timeline.GetStartFrame()) / fps)
+
         # Check right away: no point making the user wait a minute of transcription
         # only to find out the track was occupied.
-        taken = len(timeline.GetItemListInTrack("subtitle", 1) or [])
-        if taken and not opts["replace"]:
+        clashing = subtitles_in_way(timeline, span)
+        if clashing and not opts["replace"]:
             raise RuntimeError(
-                "Subtitle 1 already has {} subtitles. Tick \"Replace existing "
-                "subtitles\", or clear the track first.".format(taken))
+                "Subtitle 1 already has {} subtitles{}. Tick \"Replace existing "
+                "subtitles\", or clear the track first.".format(
+                    len(clashing), " in the marked range" if span else ""))
 
-        segs, sources, skipped = read_track(timeline, project, opts["track"])
+        segs, sources, skipped = read_track(timeline, project, opts["track"], span)
         if not segs:
-            raise RuntimeError("No audio clips with media on the selected track.")
+            raise RuntimeError("No audio clips with media on the selected track"
+                               + (" inside the marked range." if span else "."))
         if skipped:
             log("Warning: skipped {} clip(s), source file not found".format(skipped))
         # A fresh folder each run: ImportMedia refuses a path it has already imported.
@@ -541,7 +684,7 @@ def main():
             srt = os.path.join(tmp, "subtitles.srt")
             build_wav(segs, sources, wav, log)
             run_whisper(wav, srt, opts, log)
-            insert_srt(project, timeline, srt, log, opts["replace"])
+            insert_srt(project, timeline, srt, log, opts["replace"], span)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
@@ -591,6 +734,8 @@ def main():
             it["Create"].Text = "Create"
         except Exception:
             pass
+
+    log(ready_message(current), False)
 
     win.On[WINDOW_ID].Close = lambda ev: disp.ExitLoop()
     win.On.Cancel.Clicked = lambda ev: disp.ExitLoop()

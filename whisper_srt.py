@@ -75,6 +75,7 @@ class SplitCfg:
     sentence_min_fill: float = 0.45  # ...but only if the subtitle is at least this full
     sentence_min_gap: float = 0.25  # ...or if the pause after it is at least this long
     cue_min_fill: float = 0.30  # minimum fill when backing up to a better break point
+    max_time: float = 0.0  # nothing may run past this many seconds; 0 = no limit
     lang: str = "it"
     joiner: str = " "  # "" for Chinese/Japanese
 
@@ -390,6 +391,20 @@ def _stretch_short(cues: list, cfg: SplitCfg) -> None:
             cur.end += give
             nxt.start += give
 
+    # The last subtitle has nothing after it to borrow from. Normally it just extends
+    # forward, but under a ceiling (a marked in/out range) it cannot, and a word right
+    # on the boundary ends up flashing. So let it borrow backwards instead, under the
+    # same rule: never leave the donor shorter than the one being helped.
+    if len(cues) >= 2:
+        prev, last = cues[-2], cues[-1]
+        dur_last = last.end - last.start
+        dur_prev = prev.end - prev.start
+        if dur_last < cfg.min_duration and dur_prev > dur_last:
+            give = min(cfg.max_shift, cfg.min_duration - dur_last, (dur_prev - dur_last) / 2)
+            if give > 0.02:
+                last.start -= give
+                prev.end -= give
+
 
 def _fill_gaps(cues: list, cfg: SplitCfg) -> None:
     """No holes: each subtitle stays on screen until the next one arrives.
@@ -413,7 +428,13 @@ def finalize_timings(cues: list, cfg: SplitCfg) -> None:
         lower = 0.0 if i == 0 else cues[i - 1].end + cfg.min_gap
         c.start = max(c.start, lower, 0.0)
 
-        upper = None if i + 1 >= len(cues) else raw_starts[i + 1] - cfg.min_gap
+        if i + 1 < len(cues):
+            upper = raw_starts[i + 1] - cfg.min_gap
+        else:
+            # The last subtitle has nothing after it, so the minimum-duration rule
+            # below would stretch it past the end of the audio. With a marked range
+            # that means spilling outside it, possibly onto existing subtitles.
+            upper = cfg.max_time or None
         if upper is not None:
             c.end = min(c.end, upper)
 
@@ -700,6 +721,11 @@ def parse_args(argv=None):
     t.add_argument("--min-duration", type=float, default=0.9, help="shortest a subtitle should stay on screen (s)")
     t.add_argument("--max-gap", type=float, default=0.6,
                    help="a pause longer than this always closes the subtitle (s)")
+    t.add_argument("--max-time", type=float, default=0.0,
+                   help="clamp every timestamp to this many seconds; 0 = no limit")
+    t.add_argument("--offset", type=float, default=0.0,
+                   help="add this many seconds to every timestamp, for audio that\n"
+                        "starts partway into a longer timeline")
     t.add_argument("--min-gap", type=float, default=0.04,
                    help="minimum gap between two subtitles (s); 0 = back to back")
     t.add_argument("--pad-start", type=float, default=0.0, help="lead-in (s)")
@@ -770,6 +796,9 @@ def main(argv=None) -> int:
         pad_start=args.pad_start,
         pad_end=args.pad_end,
         sentence_split=not args.no_sentence_split,
+        # --max-time is given in output coordinates; the cues are built before the
+        # offset is applied, so bring the ceiling back into audio coordinates.
+        max_time=max(0.0, args.max_time - args.offset) if args.max_time else 0.0,
         stretch_short=args.stretch_short,
         fill_gaps=args.fill_gaps,
         max_fill=args.max_fill,
@@ -780,6 +809,17 @@ def main(argv=None) -> int:
 
     cues = build_cues(words, cfg)
     finalize_timings(cues, cfg)
+
+    if args.offset:
+        # The audio handed to us starts somewhere other than zero on the caller's
+        # timeline (a marked in/out range, for instance), so shift every timestamp.
+        for c in cues:
+            c.start += args.offset
+            c.end += args.offset
+
+    if args.max_time > 0:      # belt and braces after the shift
+        for c in cues:
+            c.end = min(c.end, args.max_time)
 
     base = args.output
     if not base:
