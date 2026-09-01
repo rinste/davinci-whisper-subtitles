@@ -72,11 +72,15 @@ echo "  $LINK"
 
 cat <<DONE
 
-Done. In DaVinci Resolve:
+Done. One thing left to do by hand:
 
-  1. Preferences > System > General: set "External scripting using" to Local
-  2. Workspace > Scripts > Utility > Whisper Subtitles
+  Restart DaVinci Resolve.
 
-The first run downloads the Whisper model (~3 GB for large-v3); later runs reuse it.
-Logs are written to ~/whisper_subtitles.log
+Resolve enumerates the Scripts menu at startup, so a freshly installed plugin only
+shows up after a restart. Then open it from:
+
+  Workspace > Scripts > Utility > Whisper Subtitles
+
+The first run downloads the Whisper model (~3 GB for large-v3, less for the smaller
+ones) and caches it; later runs reuse it. Logs go to ~/whisper_subtitles.log
 DONE

@@ -54,13 +54,20 @@ cd davinci-whisper-subtitles
 ```
 
 The installer checks the prerequisites, creates a virtualenv here, and symlinks the plugin
-into Resolve's Scripts folder. Then, in Resolve:
+into Resolve's Scripts folder.
 
-1. **Preferences > System > General**: set *External scripting using* to **Local**
-2. **Workspace > Scripts > Utility > Whisper Subtitles**
+Then **restart DaVinci Resolve** - it enumerates the Scripts menu at startup, so a freshly
+installed plugin does not appear until it has been restarted. After that:
+
+**Workspace > Scripts > Utility > Whisper Subtitles**
 
 The first run downloads the Whisper model (~3 GB for `large-v3`, less for the smaller ones)
 and caches it. Nothing leaves your machine: transcription runs locally.
+
+You do *not* need to touch *Preferences > System > General > External scripting using* to
+run the plugin from the menu - Resolve injects the API into scripts it launches itself.
+That setting only matters if you want to drive `whisper_srt.py` from a terminal while
+Resolve is running.
 
 To remove it: `./install.sh --uninstall`
 
