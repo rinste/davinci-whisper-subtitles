@@ -69,7 +69,24 @@ run the plugin from the menu - Resolve injects the API into scripts it launches 
 That setting only matters if you want to drive `whisper_srt.py` from a terminal while
 Resolve is running.
 
-To remove it: `./install.sh --uninstall`
+To remove it: `./install.sh --uninstall`. That unlinks the plugin from Resolve and then
+tells you exactly which folders you can delete for the space back - it never deletes the
+model cache itself, because other tools keep their models in `~/.cache/huggingface` too.
+
+### What gets written where
+
+Nothing is written into this folder while the plugin runs.
+
+| | |
+|---|---|
+| this repository | the code and its `.venv` - read-only at runtime |
+| a fresh temp folder per run | the rebuilt WAV and the SRT, deleted as soon as the subtitles are in the timeline |
+| `~/.cache/huggingface` | the Whisper models, downloaded once (~3 GB for `large-v3`) |
+| `~/whisper_subtitles.log` | what the last runs did |
+| `~/.whisper-subtitles-resolve` | one line, the path to this repository |
+
+The subtitles themselves live in your Resolve project, not in a file: the SRT is only a
+transport format on the way in. If you want one, export it from Resolve.
 
 ## Settings
 

@@ -21,9 +21,19 @@ die()  { printf '\033[31m%s\033[0m\n' "$*" >&2; exit 1; }
 if [ "${1:-}" = "--uninstall" ]; then
   rm -f "$LINK" "$MARKER"
   say "Removed the plugin from Resolve."
-  echo "The virtualenv and the downloaded Whisper models are still on disk:"
-  echo "  rm -rf \"$REPO/.venv\"        # this repo's virtualenv"
-  echo "  rm -rf ~/.cache/huggingface  # the Whisper models (several GB)"
+  echo
+  echo "Still on disk, delete them yourself if you want the space back:"
+  echo "  rm -rf \"$REPO/.venv\""
+  # NOTE: never suggest deleting ~/.cache/huggingface wholesale - other tools keep
+  # their models in there too. Only the faster-whisper ones belong to us.
+  models=$(ls -d "$HOME"/.cache/huggingface/hub/models--Systran--faster-whisper-* 2>/dev/null || true)
+  if [ -n "$models" ]; then
+    echo "  # the Whisper models this plugin downloaded:"
+    while IFS= read -r m; do
+      echo "  rm -rf \"$m\"    # $(du -sh "$m" 2>/dev/null | cut -f1)"
+    done <<< "$models"
+    echo "  # (leave the rest of ~/.cache/huggingface alone: other apps use it)"
+  fi
   exit 0
 fi
 
