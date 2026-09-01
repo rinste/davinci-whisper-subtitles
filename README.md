@@ -45,7 +45,10 @@ of one, and the two lines come out roughly even.
 
 ## Install
 
-macOS with DaVinci Resolve (Free or Studio), Python 3.9+, and ffmpeg.
+**macOS only for now.** The plugin logic is not platform-specific, but the installer and a
+couple of paths are - see [Windows and Linux](#windows-and-linux) below.
+
+Requirements: DaVinci Resolve (Free or Studio), Python 3.9+, and ffmpeg.
 
 ```bash
 git clone https://github.com/rinste/davinci-whisper-subtitles.git
@@ -108,6 +111,25 @@ Subtitles always go to **Subtitle 1**, because that is where Resolve's API puts 
 they are *appended* to whatever is already there. So if that track is occupied the plugin
 stops immediately and asks you to tick *Replace existing subtitles*, rather than stacking
 copies on top of your work.
+
+## Windows and Linux
+
+Not supported yet, and not because of anything deep. Three things are macOS-specific:
+
+- `install.sh` is bash and refuses to run elsewhere; Windows needs its own installer
+- the virtualenv interpreter is at `.venv/bin/python`, which on Windows is
+  `.venv\Scripts\python.exe`
+- `get_resolve()` falls back to the macOS API paths, though this only matters when
+  driving the script from a terminal - launched from Resolve's menu, Resolve injects
+  the API itself
+
+Everything else - the line breaking, the ffmpeg rebuild, the Resolve API calls - is
+portable. Resolve's own scripting docs give the Windows equivalents:
+`%APPDATA%\Roaming\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts` for the
+menu, and `fusionscript.dll` for the API.
+
+Pull requests welcome. Please say in the PR which Resolve version and OS build you tested
+on, since none of this has been verified outside macOS.
 
 ## Command line
 
