@@ -61,13 +61,24 @@ def install_home():
     return ""   # nothing found: run_whisper raises with the install instructions
 
 
+def venv_python(base):
+    """The interpreter of the virtualenv built by the installer.
+
+    Windows puts it in .venv\\Scripts\\python.exe, everywhere else in .venv/bin/python.
+    Falls back to whatever python is on PATH, for people who installed the
+    dependencies globally instead of running the installer.
+    """
+    for candidate in (os.path.join(base, ".venv", "Scripts", "python.exe"),
+                      os.path.join(base, ".venv", "bin", "python")):
+        if os.path.exists(candidate):
+            return candidate
+    from shutil import which
+    return which("python3") or which("python") or ""
+
+
 BASE = install_home()
 SCRIPT = os.path.join(BASE, "whisper_srt.py")
-# the virtualenv built by install.sh, or whatever python3 is on PATH
-PYTHON = os.path.join(BASE, ".venv", "bin", "python")
-if not os.path.exists(PYTHON):
-    from shutil import which as _which
-    PYTHON = _which("python3") or PYTHON
+PYTHON = venv_python(BASE)
 
 WINDOW_ID = "WhisperSubtitles"
 LOGFILE = os.path.join(HOME, "whisper_subtitles.log")
@@ -109,27 +120,49 @@ def utf8_env():
 
 
 def find_ffmpeg():
-    for p in ("/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg", "/usr/bin/ffmpeg"):
+    from shutil import which
+    found = which("ffmpeg")          # normal case: it is on PATH
+    if found:
+        return found
+    for p in ("/usr/local/bin/ffmpeg", "/opt/homebrew/bin/ffmpeg", "/usr/bin/ffmpeg",
+              r"C:\Program Files\ffmpeg\bin\ffmpeg.exe",
+              r"C:\ffmpeg\bin\ffmpeg.exe"):
         if os.path.exists(p):
             return p
-    from shutil import which
-    return which("ffmpeg")
+    return None
 
 
 # --------------------------------------------------------------------------------------
 # Hooking into Resolve (works from the Scripts menu and from a terminal)
 # --------------------------------------------------------------------------------------
 
+def resolve_api_paths():
+    """Where Resolve keeps its scripting API, per platform.
+
+    Only needed when the script is run from a terminal: launched from Resolve's
+    own Scripts menu, Resolve injects the API and this is never used.
+    """
+    if sys.platform.startswith("win"):
+        program_data = os.environ.get("PROGRAMDATA", "C:\\ProgramData")
+        return (os.path.join(program_data, "Blackmagic Design", "DaVinci Resolve",
+                             "Support", "Developer", "Scripting"),
+                "C:\\Program Files\\Blackmagic Design\\DaVinci Resolve\\fusionscript.dll")
+    if sys.platform.startswith("linux"):
+        return ("/opt/resolve/Developer/Scripting",
+                "/opt/resolve/libs/Fusion/fusionscript.so")
+    return ("/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting",
+            "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/"
+            "Fusion/fusionscript.so")
+
+
 def get_resolve():
     try:
         return resolve  # injected by Resolve when launched from the menu
     except NameError:
         pass
-    api = "/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting"
+    api, lib = resolve_api_paths()
     os.environ.setdefault("RESOLVE_SCRIPT_API", api)
-    os.environ.setdefault(
-        "RESOLVE_SCRIPT_LIB",
-        "/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/Libraries/Fusion/fusionscript.so")
+    os.environ.setdefault("RESOLVE_SCRIPT_LIB", lib)
     sys.path.append(os.path.join(api, "Modules"))
     import DaVinciResolveScript as dvr
     return dvr.scriptapp("Resolve")

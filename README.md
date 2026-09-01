@@ -45,10 +45,10 @@ of one, and the two lines come out roughly even.
 
 ## Install
 
-**macOS only for now.** The plugin logic is not platform-specific, but the installer and a
-couple of paths are - see [Windows and Linux](#windows-and-linux) below.
-
 Requirements: DaVinci Resolve (Free or Studio), Python 3.9+, and ffmpeg.
+
+macOS is the tested platform. There is a Windows installer too, but it has never been run -
+see [Windows](#windows) below.
 
 ```bash
 git clone https://github.com/rinste/davinci-whisper-subtitles.git
@@ -112,24 +112,48 @@ they are *appended* to whatever is already there. So if that track is occupied t
 stops immediately and asks you to tick *Replace existing subtitles*, rather than stacking
 copies on top of your work.
 
-## Windows and Linux
+## Windows
 
-Not supported yet, and not because of anything deep. Three things are macOS-specific:
+> **Untested.** Everything else in this project was verified by running it. The Windows
+> path was not: no Windows machine was available, so `install.ps1` has never been executed,
+> or even parsed by PowerShell. Treat it as a starting point, not a finished feature.
 
-- `install.sh` is bash and refuses to run elsewhere; Windows needs its own installer
-- the virtualenv interpreter is at `.venv/bin/python`, which on Windows is
-  `.venv\Scripts\python.exe`
-- `get_resolve()` falls back to the macOS API paths, though this only matters when
-  driving the script from a terminal - launched from Resolve's menu, Resolve injects
-  the API itself
+```powershell
+git clone https://github.com/rinste/davinci-whisper-subtitles.git
+cd davinci-whisper-subtitles
+powershell -ExecutionPolicy Bypass -File install.ps1
+```
 
-Everything else - the line breaking, the ffmpeg rebuild, the Resolve API calls - is
-portable. Resolve's own scripting docs give the Windows equivalents:
-`%APPDATA%\Roaming\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts` for the
-menu, and `fusionscript.dll` for the API.
+Then restart Resolve and look under **Workspace > Scripts > Utility**.
 
-Pull requests welcome. Please say in the PR which Resolve version and OS build you tested
-on, since none of this has been verified outside macOS.
+The installer looks for Python 3.9+ (`py -3`, `python` or `python3`), checks that ffmpeg is
+on PATH, builds the virtualenv, and puts the plugin in Resolve's Scripts folder. It tries a
+symlink first so that `git pull` is enough to update; symlinks need Developer Mode or an
+admin shell, and if that fails it falls back to copying the file, in which case re-run the
+installer after each pull. `-Uninstall` removes it.
+
+The plugin itself is platform-agnostic: it picks `.venv\Scripts\python.exe` or
+`.venv/bin/python` depending on the OS, finds ffmpeg on PATH, and only needs the
+platform-specific API paths when driven from a terminal rather than from Resolve's menu.
+
+Known unknowns, in rough order of how likely they are to bite:
+
+- **The Scripts folder.** Blackmagic's docs give it as
+  `%APPDATA%\Roaming\Blackmagic Design\DaVinci Resolve\Support\Fusion\Scripts`, but
+  `%APPDATA%` already ends in `Roaming`. The installer tries several spellings and uses the
+  one whose parent exists; if none do, it creates the first.
+- **ffmpeg** is not on PATH by default on Windows. The installer stops and suggests
+  `winget install Gyan.FFmpeg`.
+- **The ASCII locale problem** that bit us on macOS may behave differently on Windows,
+  where the default encoding is a code page rather than ASCII.
+
+If you get it working, please open an issue or a PR saying which Resolve version and
+Windows build you tested on, and what you had to change.
+
+## Linux
+
+Not attempted. The Resolve API paths are in the code (`/opt/resolve/...`), so the plugin
+may well run once installed by hand, but there is no installer.
 
 ## Command line
 
