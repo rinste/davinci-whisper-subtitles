@@ -50,6 +50,16 @@ Requirements: DaVinci Resolve (Free or Studio), Python 3.9+, and ffmpeg.
 macOS is the tested platform. There is a Windows installer too, but it has never been run -
 see [Windows](#windows) below.
 
+**No admin rights needed** to install the plugin: everything it writes lives in your home
+folder - the virtualenv next to this README, the plugin in Resolve's user Scripts folder,
+the model cache in `~/.cache`. The installer never calls `sudo`.
+
+The prerequisites are another matter. If Python or ffmpeg are missing and you cannot install
+software on the machine, ffmpeg has a way out: drop a static build somewhere on your `PATH`,
+such as `~/bin`. The plugin looks it up on `PATH` and does not care where it lives. The
+installer prints the exact commands. Python has no equivalent escape hatch - it has to be
+there already, or someone has to install it.
+
 ```bash
 git clone https://github.com/rinste/davinci-whisper-subtitles.git
 cd davinci-whisper-subtitles

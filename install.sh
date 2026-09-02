@@ -52,11 +52,25 @@ echo "  python3 $PYV"
 
 if ! command -v ffmpeg >/dev/null; then
   warn "  ffmpeg not found - it is required to read the audio."
-  if command -v brew >/dev/null; then
+  # Homebrew may or may not need an admin password, depending on who owns its prefix.
+  if command -v brew >/dev/null && [ -w "$(brew --prefix)" ]; then
     read -r -p "  Install it now with Homebrew? [y/N] " reply
     [ "${reply:-n}" = "y" ] && brew install ffmpeg || die "Install ffmpeg, then run this again."
   else
-    die "Install ffmpeg (brew install ffmpeg), then run this again."
+    echo
+    echo "  Install it one of these ways, then run this again:"
+    echo
+    echo "    brew install ffmpeg          # may ask for your admin password"
+    echo
+    echo "  No admin rights? A static build in your home folder works just as well -"
+    echo "  the plugin looks ffmpeg up on PATH, it does not care where it lives:"
+    echo
+    echo "    mkdir -p ~/bin && cd ~/bin"
+    echo "    curl -L -o ffmpeg.zip https://evermeet.cx/ffmpeg/getrelease/zip"
+    echo "    unzip -o ffmpeg.zip && rm ffmpeg.zip"
+    echo "    echo 'export PATH=\"\$HOME/bin:\$PATH\"' >> ~/.zshrc && source ~/.zshrc"
+    echo
+    die "ffmpeg is required."
   fi
 fi
 echo "  ffmpeg $(ffmpeg -version | head -1 | awk '{print $3}')"
