@@ -10,8 +10,9 @@ on your own machine.
 
 ![The plugin window](docs/gui.png)
 
-Press Create and the subtitles land on the Subtitle 1 track of your timeline. No files to
-manage, no round trip through an external app.
+Open it from **Workspace > Scripts > Whisper Subtitles**, press Create, and the subtitles
+land on the Subtitle 1 track of your timeline. No files to manage, no round trip through an
+external app.
 
 ## Why not the built-in one
 
@@ -76,7 +77,10 @@ into Resolve's Scripts folder.
 Then **restart DaVinci Resolve** - it enumerates the Scripts menu at startup, so a freshly
 installed plugin does not appear until it has been restarted. After that:
 
-**Workspace > Scripts > Utility > Whisper Subtitles**
+**Workspace > Scripts > Whisper Subtitles**
+
+The plugin lives in the `Utility` scripts folder, which Resolve lists at the top level of
+the menu rather than as a submenu, so it is there on every page.
 
 The first run downloads the Whisper model (~3 GB for `large-v3`, less for the smaller ones)
 and caches it. Nothing leaves your machine: transcription runs locally.
@@ -158,7 +162,7 @@ cd davinci-whisper-subtitles
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-Then restart Resolve and look under **Workspace > Scripts > Utility**.
+Then restart Resolve and look under **Workspace > Scripts**.
 
 The installer looks for Python 3.9+ (`py -3`, `python` or `python3`), checks that ffmpeg is
 on PATH, builds the virtualenv, and puts the plugin in Resolve's Scripts folder. It tries a

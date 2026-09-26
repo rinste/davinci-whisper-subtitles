@@ -3,7 +3,7 @@
 """
 Whisper Subtitles - Whisper-powered subtitles inside DaVinci Resolve.
 
-Workspace > Scripts > Utility > Whisper Subtitles
+Workspace > Scripts > Whisper Subtitles
 
 How it works:
   1. reads the clips on the chosen audio track (the voice-over one) and rebuilds
