@@ -79,6 +79,8 @@ installed plugin does not appear until it has been restarted. After that:
 
 **Workspace > Scripts > Whisper Subtitles**
 
+<img src="docs/menu.png" alt="Resolve's Workspace menu open on Scripts, with Whisper Subtitles in the submenu" width="400">
+
 The plugin lives in the `Utility` scripts folder, which Resolve lists at the top level of
 the menu rather than as a submenu, so it is there on every page.
 
