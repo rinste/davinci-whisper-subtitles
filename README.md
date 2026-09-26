@@ -14,6 +14,23 @@ Open it from **Workspace > Scripts > Whisper Subtitles**, press Create, and the 
 land on the Subtitle 1 track of your timeline. No files to manage, no round trip through an
 external app.
 
+<img src="docs/menu.png" alt="Resolve's Workspace menu open on Scripts, with Whisper Subtitles in the submenu" width="400">
+
+## Quick start
+
+On macOS, with DaVinci Resolve (Free or Studio), Python 3.9+ and ffmpeg installed:
+
+```bash
+git clone https://github.com/rinste/davinci-whisper-subtitles.git
+cd davinci-whisper-subtitles
+./install.sh
+```
+
+Restart Resolve, and the plugin is under **Workspace > Scripts > Whisper Subtitles** on
+every page. No admin rights needed, nothing leaves your machine, and the first run
+downloads the Whisper model (~3 GB for `large-v3`). Windows, what gets written where and
+uninstalling are under [Install](#install).
+
 ## Why not the built-in one
 
 Resolve's "Create Subtitles from Audio" wraps text by counting characters. At 18 characters
@@ -78,8 +95,6 @@ Then **restart DaVinci Resolve** - it enumerates the Scripts menu at startup, so
 installed plugin does not appear until it has been restarted. After that:
 
 **Workspace > Scripts > Whisper Subtitles**
-
-<img src="docs/menu.png" alt="Resolve's Workspace menu open on Scripts, with Whisper Subtitles in the submenu" width="400">
 
 The plugin lives in the `Utility` scripts folder, which Resolve lists at the top level of
 the menu rather than as a submenu, so it is there on every page.
