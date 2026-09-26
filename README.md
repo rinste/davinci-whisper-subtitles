@@ -16,6 +16,10 @@ external app.
 
 <img src="docs/menu.png" alt="Resolve's Workspace menu open on Scripts, with Whisper Subtitles in the submenu" width="400">
 
+Here it is in action, on YouTube:
+
+<a href="https://www.youtube.com/watch?v=tdSB4NAVlY8"><img src="https://img.youtube.com/vi/tdSB4NAVlY8/hqdefault.jpg" alt="Watch the video on YouTube" width="400"></a>
+
 ## Quick start
 
 On macOS, with DaVinci Resolve (Free or Studio), Python 3.9+ and ffmpeg installed:
